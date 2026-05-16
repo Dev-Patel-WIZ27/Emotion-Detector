@@ -1,0 +1,8 @@
+# Install with: pip install -r requirements.txt --no-deps
+# (avoids TensorFlow conflict on Python 3.14)
+
+opencv-python>=4.8.0
+deepface>=0.0.90
+tf-keras
+numpy
+pillow

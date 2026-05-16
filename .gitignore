@@ -1,0 +1,22 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+env.bak/
+venv.bak/
+
+# Snapshots and user data
+snapshots/
+*.jpg
+*.png
+*.webp
+
+# Machine learning models
+models/
+*.onnx
+*.caffemodel
+*.prototxt

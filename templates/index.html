@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>🎭 Emotion Detector — Live Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+  <!-- ── Animated background ── -->
+  <div class="bg-grid"></div>
+  <div class="bg-glow" id="bgGlow"></div>
+
+  <!-- ── Top Bar ── -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <span class="logo-icon">🎭</span>
+      <div>
+        <h1 class="logo-title">Emotion Detector</h1>
+        <p class="logo-sub">Real-time AI Analysis</p>
+      </div>
+    </div>
+    <div class="topbar-center" id="dominantBanner">
+      <span class="dom-emoji" id="domEmoji">😐</span>
+      <div>
+        <span class="dom-label" id="domLabel">NEUTRAL</span>
+        <span class="dom-conf" id="domConf">—</span>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="status-dot" id="statusDot"></div>
+      <span class="status-text" id="statusText">Connecting…</span>
+      <button class="snap-btn" onclick="takeSnapshot()">📸 Snapshot</button>
+    </div>
+  </header>
+
+  <!-- ── Main Layout ── -->
+  <main class="layout">
+
+    <!-- ── LEFT: Video feed ── -->
+    <section class="video-panel">
+      <div class="video-wrap">
+        <img id="videoFeed" src="/video_feed" alt="Webcam feed" />
+        <div class="video-overlay-corner tl"></div>
+        <div class="video-overlay-corner tr"></div>
+        <div class="video-overlay-corner bl"></div>
+        <div class="video-overlay-corner br"></div>
+        <div class="scan-line" id="scanLine"></div>
+      </div>
+      <div class="video-footer">
+        <span>🎥 Live Camera Feed</span>
+        <span id="frameTime">—</span>
+      </div>
+    </section>
+
+    <!-- ── RIGHT: Emotion Dashboard ── -->
+    <section class="dash-panel">
+
+      <!-- Emotion Bars -->
+      <div class="bars-header">
+        <span class="section-title">Emotion Scores</span>
+        <span class="update-badge" id="updateBadge">Updating…</span>
+      </div>
+
+      <div class="bars-container" id="barsContainer">
+        <!-- dynamically populated -->
+        <div class="bar-row" data-emotion="angry">
+          <div class="bar-meta">
+            <span class="bar-emoji">😠</span>
+            <span class="bar-name">Angry</span>
+            <span class="bar-pct" id="pct-angry">0.0%</span>
+          </div>
+          <div class="bar-track"><div class="bar-fill" id="bar-angry" style="--color:#DC2626"></div></div>
+        </div>
+        <div class="bar-row" data-emotion="contempt">
+          <div class="bar-meta">
+            <span class="bar-emoji">😒</span>
+            <span class="bar-name">Contempt</span>
+            <span class="bar-pct" id="pct-contempt">0.0%</span>
+          </div>
+          <div class="bar-track"><div class="bar-fill" id="bar-contempt" style="--color:#71717A"></div></div>
+        </div>
+        <div class="bar-row" data-emotion="happy">
+          <div class="bar-meta">
+            <span class="bar-emoji">😊</span>
+            <span class="bar-name">Happy</span>
+            <span class="bar-pct" id="pct-happy">0.0%</span>
+          </div>
+          <div class="bar-track"><div class="bar-fill" id="bar-happy" style="--color:#F59E0B"></div></div>
+        </div>
+        <div class="bar-row" data-emotion="sad">
+          <div class="bar-meta">
+            <span class="bar-emoji">😢</span>
+            <span class="bar-name">Sad</span>
+            <span class="bar-pct" id="pct-sad">0.0%</span>
+          </div>
+          <div class="bar-track"><div class="bar-fill" id="bar-sad" style="--color:#3B82F6"></div></div>
+        </div>
+        <div class="bar-row" data-emotion="surprise">
+          <div class="bar-meta">
+            <span class="bar-emoji">😲</span>
+            <span class="bar-name">Surprise</span>
+            <span class="bar-pct" id="pct-surprise">0.0%</span>
+          </div>
+          <div class="bar-track"><div class="bar-fill" id="bar-surprise" style="--color:#06B6D4"></div></div>
+        </div>
+        <div class="bar-row" data-emotion="neutral">
+          <div class="bar-meta">
+            <span class="bar-emoji">😐</span>
+            <span class="bar-name">Neutral</span>
+            <span class="bar-pct" id="pct-neutral">0.0%</span>
+          </div>
+          <div class="bar-track"><div class="bar-fill" id="bar-neutral" style="--color:#6B7280"></div></div>
+        </div>
+        <div class="bar-row" data-emotion="calm">
+          <div class="bar-meta">
+            <span class="bar-emoji">😌</span>
+            <span class="bar-name">Calm</span>
+            <span class="bar-pct" id="pct-calm">0.0%</span>
+          </div>
+          <div class="bar-track"><div class="bar-fill" id="bar-calm" style="--color:#C8C8C8"></div></div>
+        </div>
+      </div>
+      </div>
+
+      <!-- ── History Ring chart ── -->
+      <div class="history-section">
+        <span class="section-title">Emotion Timeline (last 20s)</span>
+        <div class="timeline" id="timeline"></div>
+      </div>
+
+      <!-- ── Stats row ── -->
+      <div class="stats-row">
+        <div class="stat-card" id="statFaces">
+          <span class="stat-val">0</span>
+          <span class="stat-lbl">Faces</span>
+        </div>
+        <div class="stat-card" id="statDom">
+          <span class="stat-val" id="statDomVal">—</span>
+          <span class="stat-lbl">Dominant</span>
+        </div>
+        <div class="stat-card" id="statConf">
+          <span class="stat-val" id="statConfVal">—</span>
+          <span class="stat-lbl">Confidence</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-val" id="statTime">—</span>
+          <span class="stat-lbl">Last Update</span>
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <!-- ── Toast ── -->
+  <div class="toast" id="toast"></div>
+
+  <script src="/static/dashboard.js"></script>
+</body>
+</html>
