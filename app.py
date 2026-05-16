@@ -21,15 +21,13 @@ from emotion_engine import EmotionEngine, EMOTIONS, EMOTION_COLORS
 
 # ── Config ────────────────────────────────────────────────────────────────────
 CAM_INDEX    = 0
-INTERVAL     = 0.1   # Super fast updates (10 times per second)
-FRAME_W      = 960
-FRAME_H      = 540
+INTERVAL     = 0.1
 SNAPSHOT_DIR = "snapshots"
 
 app = Flask(__name__)
 
 # ── Shared state ──────────────────────────────────────────────────────────────
-_lock         = threading.Lock()
+_frame_event  = threading.Condition()
 _latest_frame = None
 _engine       = EmotionEngine(analyze_every=INTERVAL)
 
@@ -39,25 +37,26 @@ os.makedirs(SNAPSHOT_DIR, exist_ok=True)
 # ── Camera thread ─────────────────────────────────────────────────────────────
 def _camera_thread():
     global _latest_frame
-    cap = cv2.VideoCapture(CAM_INDEX)
+    
+    cap = cv2.VideoCapture(CAM_INDEX, cv2.CAP_DSHOW)
     if not cap.isOpened():
-        print("[CAMERA] Standard open failed, trying DSHOW...")
-        cap = cv2.VideoCapture(CAM_INDEX, cv2.CAP_DSHOW)
+        cap = cv2.VideoCapture(CAM_INDEX)
         
     if not cap.isOpened():
         print("[CAMERA] CRITICAL: Could not open any webcam!")
         return
 
-    print("[CAMERA] Successfully opened webcam.")
-
     while True:
         ret, frame = cap.read()
-        if not ret or frame is None or frame.size == 0:
-            time.sleep(0.05)
+        if not ret or frame is None:
+            time.sleep(0.01)
             continue
+            
         _engine.submit_frame(frame)
-        with _lock:
-            _latest_frame = frame.copy()
+        
+        with _frame_event:
+            _latest_frame = frame
+            _frame_event.notify_all()
 
 
 # ── Annotate helper ───────────────────────────────────────────────────────────
@@ -67,39 +66,28 @@ def _annotate(frame: np.ndarray, faces: list, fps: float) -> np.ndarray:
     global _ui_smoothed_boxes
     out = frame.copy()
     
-    # Clean up stale trackers
-    if len(faces) < len(_ui_smoothed_boxes):
-        _ui_smoothed_boxes = {k: v for k, v in _ui_smoothed_boxes.items() if k < len(faces)}
-    
+    if not faces:
+        _ui_smoothed_boxes = {}
+        return out
+
     for i, face in enumerate(faces):
-        if face.get("error"):
-            continue
+        if face.get("error"): continue
         r  = face.get("region", {})
-        x  = r.get("x", 0);  y  = r.get("y", 0)
-        fw = r.get("w", 0);  fh = r.get("h", 0)
-        if fw < 10 or fh < 10:
-            continue
+        x, y, fw, fh = r.get("x", 0), r.get("y", 0), r.get("w", 0), r.get("h", 0)
+        if fw < 10 or fh < 10: continue
             
-        # 30fps Smooth UI Interpolation
         target_box = np.array([x, y, fw, fh], dtype=np.float32)
         if i not in _ui_smoothed_boxes:
             _ui_smoothed_boxes[i] = target_box
         else:
-            # 0.15 alpha means it glides smoothly across the high framerate video
-            _ui_smoothed_boxes[i] = 0.15 * target_box + 0.85 * _ui_smoothed_boxes[i]
+            _ui_smoothed_boxes[i] = 0.2 * target_box + 0.8 * _ui_smoothed_boxes[i]
             
         sx, sy, sfw, sfh = _ui_smoothed_boxes[i].astype(int)
-
-            
         dom = face.get("dominant", "")
         conf = face.get("scores", {}).get(dom, 0)
         
-        # Solid Blue Bounding Box
         cv2.rectangle(out, (sx, sy), (sx + sfw, sy + sfh), (255, 0, 0), 2)
-        
-        # Bright Green Text above the box
-        label = f"{dom} ({conf:.1f}%)"
-        cv2.putText(out, label, (sx, sy - 10),
+        cv2.putText(out, f"{dom} ({conf:.1f}%)", (sx, sy - 10),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2, cv2.LINE_AA)
                     
     return out
@@ -108,17 +96,17 @@ def _annotate(frame: np.ndarray, faces: list, fps: float) -> np.ndarray:
 # ── Generators ────────────────────────────────────────────────────────────────
 def _gen_video():
     while True:
-        with _lock:
+        with _frame_event:
+            if not _frame_event.wait(timeout=1.0):
+                continue
             frame = _latest_frame
-        if frame is None:
-            time.sleep(0.03)
-            continue
+            if frame is None: continue
+
         faces = _engine.get_result()
         annotated = _annotate(frame, faces, _engine.fps_display)
-        _, buf = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 80])
+        _, buf = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 85])
         yield (b"--frame\r\nContent-Type: image/jpeg\r\n\r\n"
                + buf.tobytes() + b"\r\n")
-        time.sleep(0.033)
 
 
 def _gen_emotions():
@@ -154,7 +142,7 @@ def emotion_stream():
 
 @app.route("/snapshot")
 def snapshot():
-    with _lock:
+    with _frame_event:
         frame = _latest_frame
     if frame is None:
         return jsonify({"error": "No frame available"}), 503
